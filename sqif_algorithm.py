@@ -4,6 +4,9 @@ import numpy as np
 from fpylll import IntegerMatrix, LLL, GSO
 from copy import deepcopy
 import cirq
+import sympy
+import qsimcirq
+from scipy.optimize import minimize
 
 
 class SQIF:
@@ -97,7 +100,7 @@ class SQIF:
         :param B: Prime basis (fpylll.IntegerMatrix object).
         :param t: Target vector (tuple of integers).
         :param delta: Hyperparameter for LLL-reduction (wikipedia recommends .75, as do Yan et al. (2022)).
-        :return: The given B and t, the reduced basis (D), the approximate solution (b_op), the residual vector (b_op - t), and the step signs (for use in the Hamiltonian later on).
+        :return: The given B and t, the reduced basis (D) and weights (w), the approximate solution (b_op = D*w), the residual vector (b_op - t), and the step signs (for use in the Hamiltonian later on).
         """
 
         # Create a copy of the prime basis and reduce it by LLL-reduction.
@@ -143,7 +146,7 @@ class SQIF:
         step_signs = - (np.array(rounding_direction).astype(int) * 2 - 1)
         logging.info(f'Due to the roundings, our operators will have signs:\n{step_signs}\n')
 
-        return B, t, D, b_op, residual_vector, step_signs
+        return B, t, D, w, b_op, residual_vector, step_signs
 
     def define_hamiltonian(self, D, residual_vector, step_signs):
         """
@@ -180,3 +183,81 @@ class SQIF:
         logging.info(f'H = \n{string_H}\n')
 
         return H
+
+    def generate_gamma_layer(self, H, i):
+        """
+        Generate the i-th gamma layer executing the unitary exp(-i * gamma * H).
+
+        :param H: The Hamiltonian.
+        :param i: Layer index.
+        :return: [] of cirq.DensePauliString object corresponding to the i-th gamma layer in the QAOA circuit.
+        """
+
+        # Gamma symbol placeholder.
+        gamma = sympy.Symbol(f'gamma_{i}')
+
+        # Instantiate the DensePauliString operators.
+        dense_I = cirq.DensePauliString('')
+        dense_Z = cirq.DensePauliString('Z')
+        dense_ZZ = cirq.DensePauliString('ZZ')
+
+        # Consider the terms in the Hamiltonian.
+        for term in H:
+            # Split the term into its coefficient and operator.
+            coefficient = term.coefficient
+            operator = term.with_coefficient(1).gate
+
+            # Map to the appropriate circuit element on the basis of the operator, parameterised by gamma.
+            if operator == dense_ZZ:
+                yield cirq.ZZ(*term.qubits) ** (gamma * coefficient)
+            elif operator == dense_Z:
+                yield cirq.Z(*term.qubits) ** (gamma * coefficient)
+            elif operator == dense_I:
+                yield []
+            else:
+                raise Exception(f'Unrecognised Pauli string term {term} in the Hamiltonian.')
+
+    def generate_beta_layer(self, qubits, i):
+        """
+        Generate the i-th beta layer, executing a Pauli-X raised to beta across the given qubits.
+
+        :param qubits: The qubits in the circuit.
+        :param i: Layer index.
+        :return: [] of cirq.DensePauliString object corresponding to the i-th beta layer in the QAOA circuit.
+        """
+
+        # Beta symbol placeholder.
+        beta = sympy.Symbol(f'beta_{i}')
+
+        # The layer is trivially defined by NOT gates parameterised by beta.
+        return [cirq.X(q) ** beta for q in qubits]
+
+    def generate_qaoa_circuit(self, H, p=1):
+        """
+        Generate a QAOA circuit for the given Hamiltonian with a given depth.
+
+        :param H: The Hamiltonian.
+        :param p: Depth of the circuit (should be kept relatively small -- say 1 to 5).
+        :return: cirq.Circuit object performing QAOA with the given Hamiltonian p times (depth p).
+        """
+
+        # Number of qubits.
+        qubits = H.qubits
+
+        # Define the circuit.
+        return cirq.Circuit(
+            # Hadamard over all qubits first to open uniform superposition.
+            cirq.H.on_each(*qubits),
+
+            # p layer of QAOA-ness.
+            [
+                (
+                    # Gamma layer.
+                    self.generate_gamma_layer(H, i),
+
+                    # Beta layer.
+                    self.generate_beta_layer(qubits, i)
+                )
+                for i in range(p)
+            ]
+        )
