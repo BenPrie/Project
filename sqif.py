@@ -117,7 +117,7 @@ class CVP:
         self.m = (self.l * self.n) / np.log2(self.n)
 
         # Round them, after the fact.
-        self.n, self.m = int(np.floor(self.n)), int(np.floor(self.m))
+        self.n, self.m = int(round(self.n)), int(round(self.m))
 
         # Produce the random permutation for the diagonal.
         f = np.random.permutation([(i + 1) // 2 for i in range(1, self.m + 1)])
