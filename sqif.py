@@ -263,6 +263,7 @@ def find_optimal_parameters(circuit, H, min_method='Nelder-Mead'):
     
     :param circuit: The QAOA circuit.
     :param H: The Hamiltonian.
+
     :return: cirq.ParamResolver object assigning values to each placeholder parameter in the given circuit.
     """
     
@@ -341,14 +342,15 @@ def integer_outcomes_to_lattice_vectors(m, states, w, D, step_signs):
 
 # ---
 
-def solve_cvp(cvp, n_samples, delta=.75, p=1, min_method='Nelder-Mead', verbose=True):
-    """[]
-    Given a CVP, perform the SQIF algorithm to solve it.
+def solve_cvp(cvp, n_samples, delta=.75, p=1, min_method='Nelder-Mead', optimal_parameters=None, verbose=True):
+    """
+    Given a CVP, perform the SQIF algorithm's subroutine to solve it.
 
     :param n_samples: No. times shots for the circuit.
     :param delta: LLL-reduction hyperparameter.
     :param p: Number of layers in the QAOA circuit.
     :param min_method: Method to use in minimisation for parameter optimisation.
+    :param optimal_parameters: Optionally pass in the parameter assignment. Leave as None to find them automatically.
     :param verbose: Whether to print messages during the run.
 
     :return: All 2^n solutions around the approximate solution, sorted according to probability, and corresponding probabilities.
@@ -377,7 +379,8 @@ def solve_cvp(cvp, n_samples, delta=.75, p=1, min_method='Nelder-Mead', verbose=
         print()
 
     # Find the optimal set of betas and gammas for the circuit.
-    optimal_parameters = find_optimal_parameters(circuit, H, min_method)
+    if optimal_parameters is None:
+        optimal_parameters = find_optimal_parameters(circuit, H, min_method)
 
     if verbose:
         # Print the (found) optimal parameter assignments.
@@ -391,4 +394,4 @@ def solve_cvp(cvp, n_samples, delta=.75, p=1, min_method='Nelder-Mead', verbose=
     # Convert the remaining integer outcomes to lattice vectors.
     lattice_vectors = integer_outcomes_to_lattice_vectors(cvp.m, np.array(outcomes), w, D, step_signs)
 
-    return lattice_vectors, np.array(frequencies) / n_samples, b_op
+    return lattice_vectors, np.array(frequencies) / n_samples, b_op, optimal_parameters
