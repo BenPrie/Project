@@ -258,12 +258,13 @@ def generate_qaoa_circuit(H, p=1):
     )
 
 
-def find_optimal_parameters(circuit, H, min_method='Nelder-Mead'):
+def find_optimal_parameters(circuit, H, x0=None, min_method='Nelder-Mead'):
     """
     Find the optimal assignments over the parameters in the given circuit.
     
     :param circuit: The QAOA circuit.
     :param H: The Hamiltonian.
+    :param x0: Initial parameter values.
 
     :return: cirq.ParamResolver object assigning values to each placeholder parameter in the given circuit.
     """
@@ -291,7 +292,8 @@ def find_optimal_parameters(circuit, H, min_method='Nelder-Mead'):
         return sum(term.coefficient * val for term, val in zip(H, result)).real
     
     # Initialise the assignments (with no prior knowledge, all zeros is fine).
-    x0 = np.asarray([0.0] * len(parameters))
+    if x0 is None:
+        x0 = np.asarray([0.0] * len(parameters))
     
     # Minimise the function over the parameters.
     result = minimize(func_to_minimise, x0, method=min_method)
@@ -343,13 +345,14 @@ def integer_outcomes_to_lattice_vectors(m, states, w, D, step_signs):
 
 # ---
 
-def solve_cvp(cvp, n_samples, delta=.75, p=1, min_method='Nelder-Mead', optimal_parameters=None, verbose=True):
+def solve_cvp(cvp, n_samples, delta=.75, p=1, x0=None, min_method='Nelder-Mead', optimal_parameters=None, verbose=True):
     """
     Given a CVP, perform the SQIF algorithm's subroutine to solve it.
 
     :param n_samples: No. times shots for the circuit.
     :param delta: LLL-reduction hyperparameter.
     :param p: Number of layers in the QAOA circuit.
+    :param x0: Initial 'guess' for parameter assignment.
     :param min_method: Method to use in minimisation for parameter optimisation.
     :param optimal_parameters: Optionally pass in the parameter assignment. Leave as None to find them automatically.
     :param verbose: Whether to print messages during the run.
@@ -381,7 +384,7 @@ def solve_cvp(cvp, n_samples, delta=.75, p=1, min_method='Nelder-Mead', optimal_
 
     # Find the optimal set of betas and gammas for the circuit.
     if optimal_parameters is None:
-        optimal_parameters = find_optimal_parameters(circuit, H, min_method)
+        optimal_parameters = find_optimal_parameters(circuit, H, x0, min_method)
 
     if verbose:
         # Print the (found) optimal parameter assignments.
